@@ -41,6 +41,8 @@ jupyter lab
 
 推荐按下表顺序首次运行，便于逐步检查结果；每本 notebook 也能从全新 kernel 单独运行，不需要先执行其他 notebook。若直接运行比较或误差分析，程序会自动补齐缺失的训练结果，首次运行可能耗时较长。
 
+也可以直接运行 [legacy_full_pipeline.ipynb](legacy_full_pipeline.ipynb)：它是独立的完整项目，按顺序整合以下 00–10 的全部内容，并内嵌相同的数据处理、模型定义、选参和训练代码。只需该 notebook、原始数据及其首页列出的 Python 依赖，不需要项目内的 `.py` 文件或其他 notebook；十二个主模型会在 notebook 中从头训练。
+
 | 顺序 | Notebook | 任务 |
 | --- | --- | --- |
 | 00 | [数据准备与审计](00_data_preparation.ipynb) | 去重、有效性与历史计数审计、固定切分和特征缓存 |
@@ -51,7 +53,9 @@ jupyter lab
 | 05 | [LightGBM](05_lightgbm.ipynb) | LGBM-logh、LGBM-p |
 | 06 | [神经半衰期模型](06_neural_hlr.ipynb) | N-HLR、N-HLR -lex |
 | 07 | [统一模型比较](07_model_comparison.ipynb) | 十二模型的 Validation / Test 与复习间隔对照 |
-| 08 | [误差分析](08_error_analysis.ipynb) | 误差分解、模型预测差异与风险排序 |
+| 08 | [N-HLR 非线性消融](08_nonlinearity_ablation.ipynb) | 对齐训练规则后比较线性 HLR 与四单元 ReLU N-HLR |
+| 09 | [MAE 与 RMSE 误差分析](09_mae_rmse_analysis.ipynb) | 预测分布、极高预测占比及分组 MAE/MSE contribution |
+| 10 | [RF 与 LightGBM 相似性](10_rf_lightgbm_similarity.ipynb) | 原始输出、裁剪边界和逐样本预测差异诊断 |
 
 ## 数据与评估口径
 
@@ -73,8 +77,9 @@ jupyter lab
 - [experiment_pipeline.py](experiment_pipeline.py)：管理 notebook 间的依赖、训练入口及结果缓存。
 - [pipeline_steps/](pipeline_steps/)：按阶段保存从原完整 notebook 拆出的可阅读计算代码。
 - [pipeline_cells.py](pipeline_cells.py)：加载这些计算段供共享入口使用。
-- [legacy_full_pipeline.ipynb](legacy_full_pipeline.ipynb)：拆分前的完整 notebook 归档。
-- [build_split_notebooks.py](build_split_notebooks.py)：从归档重新生成拆分后的 notebook 和 `pipeline_steps/`；日常运行实验无需执行。生成时会覆盖这些生成文件。
+- [legacy_full_pipeline.ipynb](legacy_full_pipeline.ipynb)：与 00–10 内容一致、内嵌全部训练代码的 standalone notebook，可独立从全新 kernel 顺序运行。
+- [build_legacy_notebook.py](build_legacy_notebook.py)：从当前 00–10 和共用计算代码生成 standalone notebook；加 `--check` 可只检查内容是否一致。仅同步时使用，独立运行不需要此脚本。
+- [build_split_notebooks.py](build_split_notebooks.py)：根据整合版的单元来源导回全部拆分版；加 `--check` 可只检查。共用计算代码请直接修改 `pipeline_steps/`，上述脚本不会覆盖这些代码。
 
 ## 参考资料
 

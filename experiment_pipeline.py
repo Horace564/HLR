@@ -249,6 +249,16 @@ class Pipeline:
         self.done.add("nn")
         return self._public()
 
+    def rf_lgbm_similarity(self):
+        """Run only the paired RF-versus-LightGBM Test diagnostics."""
+        self.comparison()
+        self.random_forest()
+        self.lightgbm()
+        if "rf_lgbm_similarity" not in self.done:
+            self._run(98)
+            self.done.add("rf_lgbm_similarity")
+        return self._public()
+
     def comparison(self):
         self.prepare()
         if "comparison" in self.done:

@@ -1,6 +1,6 @@
 {
-  "source": "C:\\Users\\horace\\Documents\\Projects\\Data_analytics\\3544-project\\data\\processed\\settles.acl16.learning_traces.13m.dedup_v1.csv.gz",
-  "source_sha256": "ccff5ca032e8c0b2516b54e4f66488f1d7c4261a42219ab36452c5f1675cec04",
+  "source": "D:\\fujing123\\Projects\\Data-Analytic\\HLR\\data\\processed\\settles.acl16.learning_traces.13m.dedup_v1.csv.gz",
+  "source_sha256": "ea2648bd3cc3da615a9df760a30cd350edef4459d7707009047d22f370222dd9",
   "scope": "full_file",
   "group_key": [
     "user_id",
@@ -9,7 +9,7 @@
   ],
   "rule": "Strictly later timestamps only; rollback compares prior maximum history count; cumulative shortfall compares prior maximum history + session count.",
   "same_timestamp_policy": "No ordering or anomaly comparison within a timestamp.",
-  "anomaly_rows_file": "C:\\Users\\horace\\Documents\\Projects\\Data_analytics\\3544-project\\data\\interim\\history_count_anomalies_clean_v1.csv.gz",
+  "anomaly_rows_file": "D:\\fujing123\\Projects\\Data-Analytic\\HLR\\data\\interim\\history_count_anomalies_clean_v1.csv.gz",
   "rows_scanned": 12854145,
   "groups": 5861629,
   "timestamp_groups": 12854104,
