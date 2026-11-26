@@ -1,7 +1,7 @@
 """Independent notebook entry points for the Duolingo experiment.
 
-The computations are kept verbatim in pipeline_cells.py. This module supplies
-fresh-kernel orchestration and versioned, reusable experiment artifacts.
+Computation blocks are loaded through pipeline_cells.py. This module supplies
+fresh-kernel orchestration, localized messages, and reusable experiment artifacts.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 from IPython.display import display
 
-from pipeline_cells import CELLS
+from pipeline_cells import CELLS, localized_cells
 
 
 ROOT = Path(__file__).resolve().parent
@@ -26,18 +26,22 @@ ARTIFACT_DIR = ROOT / "data" / "artifacts"
 
 
 class Pipeline:
-    def __init__(self):
+    """Run shared experiments with English or Chinese presentation text."""
+
+    def __init__(self, language="en"):
+        self.execution_cells = localized_cells(language)
         self.ctx = {"__builtins__": __builtins__, "__name__": "experiment_pipeline",
                     "np": np, "pd": pd, "display": display}
         self.done = set()
 
     def _run(self, *indices):
         for index in indices:
-            exec(compile(CELLS[index], f"pipeline_cells.py:{index}", "exec"), self.ctx)
+            compiled = compile(self.execution_cells[index], f"pipeline_cells.py:{index}", "exec")
+            exec(compiled, self.ctx)
 
     def _definitions(self, index, *, constants=False):
         """Load function and class definitions without executing model fits."""
-        tree = ast.parse(CELLS[index])
+        tree = ast.parse(self.execution_cells[index])
         nodes = []
         for node in tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef)):

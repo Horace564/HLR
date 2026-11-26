@@ -6,3 +6,11 @@ data/raw/
 data/processed/
 data/interim/
 data/artifacts/
+
+interim-output/
+/build_legacy_notebook.py
+/build_split_notebooks.py
+
+# Regenerated audit summaries and experiment figures
+/reports/
+

@@ -1,87 +1,232 @@
-# 间隔重复回忆率预测：十二模型对照实验
+# Recall Prediction for Spaced Repetition Learning
 
-本项目使用 Duolingo 公开的学习记录，研究模型结构、预测目标和新增特征如何影响回忆率 `p_recall` 的预测。所有模型使用同一份去重数据和固定的 Train / Validation / Test 切分；主要比较指标为回忆率的 MAE，并分析 RMSE、AUC、半衰期 Spearman 相关系数及不同复习间隔下的表现。研究背景、方法与结果见 [完整报告](report.md)。
+English · [简体中文](README.zh-CN.md)
 
-## 快速开始
+A data science study of how model architecture, prediction targets, and learning-history features affect recall-rate prediction. The project compares twelve models on Duolingo learning traces and investigates the differences behind their evaluation scores.
 
-### 1. 准备 Python 环境
+[Final report](deliverables/ELEC3544_Group4_final_report.pdf) · [Presentation](deliverables/final_presentation.pptx) · [Notebook guide](NOTEBOOKS.md)
 
-建议使用 64 位 Python 3.11。从仓库根目录执行：
+## Contents
+
+- [1. Project overview](#1-project-overview)
+- [2. Results and findings](#2-results-and-findings)
+- [3. Quick start](#3-quick-start)
+- [4. Repository structure](#4-repository-structure)
+- [5. References and team](#5-references-and-team)
+
+## 1. Project overview
+
+### 1.1 Background and motivation
+
+Spaced repetition schedules reviews over time to support long-term retention. Predicting how well a learner will recall an item provides a basis for choosing when to review it. Half-Life Regression (HLR) represents memory through a learned half-life and combines it with the elapsed review interval to estimate recall probability.
+
+Inspired by HLR and subsequent neural forgetting-curve models, this project asks how additional learner and language features, nonlinear models, and alternative prediction targets affect prediction quality. All twelve models use the same cleaned data and fixed evaluation split.
+
+### 1.2 Dataset
+
+The study uses Duolingo's public learning traces, released with Settles and Meeder (2016). Each row represents a learner's practice session for a lexeme. The target, `p_recall`, is the proportion of correct responses within that session, calculated as `session_correct / session_seen`.
+
+The raw release contains **12,854,226 records and 12 fields**. These include practice history (`history_seen`, `history_correct`), elapsed time (`delta`), learner and lexeme identifiers, learning and interface languages, timestamps, and current-session outcomes.
+
+| Data-quality check | Result |
+| --- | --- |
+| Exact duplicates | 81 removed, retaining the first occurrence |
+| Cleaned records | 12,854,145 |
+| Basic validity violations after deduplication | 0 |
+| Records with historical-count inconsistencies | 101,466 retained and reported |
+
+The cleaned file is split in its original row order into **Train 72% (9,254,984 records)**, **Validation 18% (2,313,746)**, and **Test 10% (1,285,415)**. Validation supports model selection and early stopping. Test supports final evaluation. The target distribution is highly concentrated near full recall.
+
+### 1.3 Modeling approach
+
+The base input is `[sqrt(1 + c), sqrt(1 + w), 1]`, where `c = history_correct` and `w = history_seen - history_correct`. The review interval is converted from seconds to days, `Δ = delta / 86400`.
+
+Recall labels are clipped to `[0.0001, 0.9999]`. Half-life models use the derived target `h = clip(-Δ / log2(p), 15/1440, 274)` days and predict recall through the forgetting curve
+
+$$
+\hat p = 2^{-\Delta/\hat h}.
+$$
+
+Predictions use the same clipping bounds. The half-life target is inferred from the recall label. The model families are
+
+| Family | Models | Prediction approach |
+| --- | --- | --- |
+| Baselines | HLR, HLR -lex, Train mean | Linear half-life estimation, or a constant training-set mean |
+| HLR feature extensions | HLR-User, HLR-Lang, HLR-User+Lang | Add learner and/or language one-hot features to HLR |
+| Neural HLR | N-HLR, N-HLR -lex | Four ReLU hidden units predict `log2(h)`, followed by the forgetting curve |
+| Tree models | RF-h, RF-p, LGBM-h, LGBM-p | Predict `log2(h)` from history, or predict recall directly from history and `Δ` |
+
+The `-lex` suffix removes lexeme features. In the notebooks, RF-h and LGBM-h are named `RF-logh (E1)` and `LGBM-logh (E3)`. Their direct-recall counterparts are E2 and E4.
+
+Inputs use information available before the current session. Categorical vocabularies are learned from Train only. A timestamp check confirms that every Train record precedes every Test record. The main metrics are MAE, RMSE, and AUC, with AUC labels defined by `np.rint(p_target)`.
+
+## 2. Results and findings
+
+### 2.1 Five main observations
+
+The table reproduces the final report's results on the same **1,285,415 Test records**. Lower MAE and RMSE and higher AUC indicate better performance. Bold values mark the best score in each column.
+
+| Model | MAE ↓ | RMSE ↓ | AUC ↑ |
+| --- | ---: | ---: | ---: |
+| HLR | 0.128033 | 0.290877 | 0.537856 |
+| HLR -lex | 0.128283 | 0.290873 | 0.537459 |
+| Train mean | 0.174210 | 0.271138 | 0.500000 |
+| HLR-User | 0.127069 | 0.290409 | 0.540654 |
+| HLR-Lang | 0.127938 | 0.290823 | 0.537993 |
+| HLR-User+Lang | 0.126819 | 0.290242 | 0.540222 |
+| N-HLR | **0.118898** | 0.287320 | 0.539874 |
+| N-HLR -lex | 0.118909 | 0.287335 | 0.540314 |
+| RF-h | 0.164276 | 0.317893 | 0.549080 |
+| RF-p | 0.170206 | **0.267520** | 0.604966 |
+| LGBM-h | 0.164277 | 0.317891 | 0.549281 |
+| LGBM-p | 0.170254 | 0.267539 | **0.605412** |
+
+1. **Learner and language features provide modest gains.** HLR-User+Lang improves MAE from 0.128033 to 0.126819, while the individual feature extensions produce smaller changes.
+2. **Neural HLR achieves the lowest MAE.** N-HLR reaches 0.118898. Its lexeme-free counterpart performs almost identically on this metric.
+3. **RF and LightGBM behave similarly under the same prediction target.** Both their half-life and direct-recall variants have closely matched aggregate scores.
+4. **The tree-model prediction approach changes the trade-off.** Direct-recall models improve RMSE and AUC relative to their half-life counterparts, with higher MAE. These variants also add `Δ` as an input, so this comparison changes both the target and the features.
+5. **Model rankings depend on the metric.** N-HLR has the lowest MAE, RF-p the lowest RMSE, and LGBM-p the highest AUC. The evaluation priority therefore affects the preferred model.
+
+### 2.2 Further analysis
+
+**Does N-HLR improve because of nonlinearity?** A matched-training ablation compares the original HLR -lex, a linear HLR using the neural model's training procedure, and a four-ReLU N-HLR. All use the same lexeme-free inputs, with three paired seeds for the two aligned variants.
+
+| Model | Test MAE |
+| --- | ---: |
+| Original HLR -lex | 0.128283 |
+| Aligned-Linear-HLR -lex | 0.119907 ± 0.000016 |
+| N-HLR -lex | 0.118903 ± 0.000053 |
+
+Most of the improvement appears after aligning the loss and optimization procedure. Nonlinearity adds a further mean MAE improvement of **0.001004**, with the same direction across all three seeds. The two parameterizations have different function-level regularization effects, even with the same L2 coefficient, so this is a controlled comparison with a remaining regularization limitation. See [08: nonlinearity ablation](08_nonlinearity_ablation.ipynb).
+
+**Why do MAE and RMSE rank models differently?** In Test, 83.603% of labels equal the upper clipping bound. HLR makes smaller errors on this large group, helping its MAE, but can substantially overestimate low-recall records. Squaring increases the contribution of larger errors relative to smaller ones, giving these records more influence on MSE and hence RMSE. Grouped MAE/MSE contributions explain the ranking reversal between HLR and RF-p. See [09: MAE and RMSE analysis](09_mae_rmse_analysis.ipynb).
+
+**Why are RF and LightGBM so similar?** We first investigated model reuse, row misalignment, cache overwrite, and post-processing errors. Independent prediction reconstruction and comparisons of raw and clipped outputs ruled out the tested implementation problems. A plausible explanation is that both methods learn highly similar predictive patterns from the shared inputs and targets. Clipping further increases the apparent similarity of the half-life variants. This is a preliminary diagnosis, and the underlying phenomenon remains future work. See [10: RF and LightGBM similarity](10_rf_lightgbm_similarity.ipynb).
+
+These findings describe the current offline split. Historical-count inconsistencies are retained, and learners may appear in both Train and Test. Broader evaluation by learner, features, and random seed is left for future work.
+
+## 3. Quick start
+
+### 3.1 Environment setup
+
+Use **64-bit Python 3.11**. The experiments run on CPU. Full-data random-forest training requires substantial RAM, and data processing and model caches occupy several GB of disk space. Runtime depends on the machine and available caches.
+
+Clone the repository and enter its root directory
+
+```bash
+git clone https://github.com/Horace564/HLR.git
+cd HLR
+python -m venv .venv
+```
+
+Activate the environment on Windows PowerShell
 
 ```powershell
-python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+```
+
+On macOS or Linux
+
+```bash
+source .venv/bin/activate
+```
+
+Install the pinned dependencies and register a notebook kernel
+
+```bash
 python -m pip install -r requirements.txt
 python -m ipykernel install --user --name 3544-project --display-name "Python (3544-project)"
 ```
 
-macOS / Linux 将激活命令换成 `source .venv/bin/activate`。项目已在 Python 3.11 的 `data-science` 环境中检查过；`requirements.txt` 列出运行所需的包。已有满足依赖的环境也可以直接使用。
+### 3.2 Dataset preparation
 
-### 2. 获取原始数据
+Download `settles.acl16.learning_traces.13m.csv.gz` from the original Duolingo dataset, hosted on Harvard Dataverse. The original project also links to the release. [Dataset](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/N8XJME) · [Duolingo HLR repository](https://github.com/duolingo/halflife-regression)
 
-从 Duolingo [HLR 原项目](https://github.com/duolingo/halflife-regression)链接的 [Harvard Dataverse 数据集](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/N8XJME)下载压缩 CSV，放到以下位置，保持文件名不变，也不要解压：
+Create `data/raw/` and place the compressed file at the following path, keeping its filename and gzip compression
 
 ```text
-data/raw/settles.acl16.learning_traces.13m.csv.gz
+HLR/
+└── data/
+    └── raw/
+        └── settles.acl16.learning_traces.13m.csv.gz
 ```
 
-新检出的仓库若没有 `data/raw/`，先在仓库根目录执行 `mkdir data/raw`。
+The raw file is approximately 361 MiB. The notebooks create cleaned data, feature caches, audit summaries, model artifacts, and figures as needed. Data files, caches, and the generated `reports/` directory are excluded from Git.
 
-代码会从这个文件自动构建去重数据和特征缓存。原始文件约 361 MiB；完整实验还会产生较大的中间文件和模型文件，请预留数 GB 磁盘空间。数据来自 Settles 与 Meeder（2016）；使用或引用数据时请引用原论文，见下方参考资料。
+### 3.3 Running the standalone notebook
 
-### 3. 启动并运行 notebook
+Start JupyterLab from the repository root
 
-在仓库根目录运行：
-
-```powershell
+```bash
 jupyter lab
 ```
 
-在 JupyterLab 中选择 **Python (3544-project)** kernel，打开需要的 notebook，执行 **Restart Kernel and Run All Cells**。也可以用 VS Code 打开 notebook，并选择同一个 Python 环境。
+Open `legacy_full_pipeline.ipynb`, select **Python (3544-project)**, and choose **Restart Kernel and Run All Cells**. VS Code can use the same Python environment.
 
-推荐按下表顺序首次运行，便于逐步检查结果；每本 notebook 也能从全新 kernel 单独运行，不需要先执行其他 notebook。若直接运行比较或误差分析，程序会自动补齐缺失的训练结果，首次运行可能耗时较长。
+Root-level notebooks use English by default. The [Chinese standalone edition](notebooks/zh-CN/legacy_full_pipeline.ipynb) and all Chinese modular notebooks are grouped under `notebooks/zh-CN/`. Each notebook links to its other language edition. When launched from that subdirectory, it automatically locates the project root and shares the same data and generated outputs.
 
-也可以直接运行 [legacy_full_pipeline.ipynb](legacy_full_pipeline.ipynb)：它是独立的完整项目，按顺序整合以下 00–10 的全部内容，并内嵌相同的数据处理、模型定义、选参和训练代码。只需该 notebook、原始数据及其首页列出的 Python 依赖，不需要项目内的 `.py` 文件或其他 notebook；十二个主模型会在 notebook 中从头训练。
+This notebook contains the complete data-processing, model-definition, tuning, training, and analysis code. It can also run in a separate folder containing just the notebook and the raw dataset at the path above, with the required packages installed. Its twelve main models train in the notebook kernel. Preprocessing and the three-seed ablation can reuse their generated caches.
 
-| 顺序 | Notebook | 任务 |
-| --- | --- | --- |
-| 00 | [数据准备与审计](00_data_preparation.ipynb) | 去重、有效性与历史计数审计、固定切分和特征缓存 |
-| 01 | [探索性分析](01_eda.ipynb) | 去重数据的分布与图表 |
-| 02 | [HLR 基线](02_hlr_baselines.ipynb) | HLR、HLR -lex、Train mean |
-| 03 | [HLR 特征实验](03_hlr_experiments.ipynb) | HLR-User、HLR-Lang、HLR-User+Lang |
-| 04 | [随机森林](04_random_forest.ipynb) | RF-logh、RF-p |
-| 05 | [LightGBM](05_lightgbm.ipynb) | LGBM-logh、LGBM-p |
-| 06 | [神经半衰期模型](06_neural_hlr.ipynb) | N-HLR、N-HLR -lex |
-| 07 | [统一模型比较](07_model_comparison.ipynb) | 十二模型的 Validation / Test 与复习间隔对照 |
-| 08 | [N-HLR 非线性消融](08_nonlinearity_ablation.ipynb) | 对齐训练规则后比较线性 HLR 与四单元 ReLU N-HLR |
-| 09 | [MAE 与 RMSE 误差分析](09_mae_rmse_analysis.ipynb) | 预测分布、极高预测占比及分组 MAE/MSE contribution |
-| 10 | [RF 与 LightGBM 相似性](10_rf_lightgbm_similarity.ipynb) | 原始输出、裁剪边界和逐样本预测差异诊断 |
+### 3.4 Running the modular notebooks
 
-## 数据与评估口径
+The **eleven notebooks numbered 00–10** cover the same workflow in separate stages. Keep `experiment_pipeline.py`, `pipeline_cells.py`, and `pipeline_steps/` beside them. Open any stage with the registered kernel and run all its cells.
 
-原始数据约 1,285 万行、12 列。项目按全部字段去除 81 条完全重复记录，得到 **12,854,145** 行；基础有效性审计通过，历史计数异常单独报告并保留。清洗后的行顺序决定固定切分：Train **9,254,984** 行、Validation **2,313,746** 行、Test **1,285,415** 行，比例约为 72% / 18% / 10%。选参与提前停止使用 Train / Validation；Test 用于最终比较。详细定义见 [报告](report.md)。
+Each stage supports a fresh kernel. Missing upstream results are generated automatically, and matching model caches are reused. Starting with 07–10 on a fresh checkout can therefore trigger model training. Following 00–10 in order makes the initial run easier to inspect.
 
-## 输出、缓存与重复运行
+The detailed stage map and execution notes are in the [Notebook guide](NOTEBOOKS.md#english). Repeated fits can show small numerical differences, particularly in rank-based diagnostics.
 
-| 路径 | 内容 |
-| --- | --- |
-| `data/processed/` | 去重后的 gzip CSV 和清单 |
-| `data/interim/` | 特征、类别索引缓存和审计明细 |
-| `data/artifacts/` | 模型权重、选参表、训练资源统计、评估结果和逐行 Test 预测 |
-| `reports/` | 数据质量与历史计数审计摘要 |
+Both language editions use one shared training implementation and the same cache identities. Changing the display language can reuse existing modular model results. The two standalone editions each embed the full implementation and can run independently.
 
-模型结果按源数据、切分、相关计算代码和主要软件版本生成缓存标识。重复运行同一 notebook 时会读取匹配的结果；缺失或不匹配时才重新计算。`07_model_comparison.ipynb` 保存所有模型的 Test 逐行预测，后续分析可复用。随机森林的全量模型文件可能较大，训练阶段也需要较多内存。`joblib` 文件应只从自己信任的本项目运行结果加载。
+## 4. Repository structure
 
-## 代码结构
+```text
+HLR/
+├── README.md                         # English project overview
+├── README.zh-CN.md                   # Chinese project overview
+├── NOTEBOOKS.md                      # Bilingual notebook guide
+├── requirements.txt                  # Python dependencies
+├── legacy_full_pipeline.ipynb        # Standalone end-to-end workflow
+├── 00_data_preparation.ipynb
+├── 01_eda.ipynb
+├── 02_hlr_baselines.ipynb
+├── 03_hlr_experiments.ipynb
+├── 04_random_forest.ipynb
+├── 05_lightgbm.ipynb
+├── 06_neural_hlr.ipynb
+├── 07_model_comparison.ipynb
+├── 08_nonlinearity_ablation.ipynb
+├── 09_mae_rmse_analysis.ipynb
+├── 10_rf_lightgbm_similarity.ipynb
+├── experiment_pipeline.py            # Modular execution and result caching
+├── pipeline_cells.py                 # Loads shared computation blocks
+├── pipeline_steps/                   # Data preparation, training, and evaluation
+├── notebooks/
+│   └── zh-CN/                       # All 12 Chinese notebook editions
+├── deliverables/                     # Final report and presentation
+└── paper/                            # Reference paper copies
+```
 
-- [experiment_pipeline.py](experiment_pipeline.py)：管理 notebook 间的依赖、训练入口及结果缓存。
-- [pipeline_steps/](pipeline_steps/)：按阶段保存从原完整 notebook 拆出的可阅读计算代码。
-- [pipeline_cells.py](pipeline_cells.py)：加载这些计算段供共享入口使用。
-- [legacy_full_pipeline.ipynb](legacy_full_pipeline.ipynb)：与 00–10 内容一致、内嵌全部训练代码的 standalone notebook，可独立从全新 kernel 顺序运行。
-- [build_legacy_notebook.py](build_legacy_notebook.py)：从当前 00–10 和共用计算代码生成 standalone notebook；加 `--check` 可只检查内容是否一致。仅同步时使用，独立运行不需要此脚本。
-- [build_split_notebooks.py](build_split_notebooks.py)：根据整合版的单元来源导回全部拆分版；加 `--check` 可只检查。共用计算代码请直接修改 `pipeline_steps/`，上述脚本不会覆盖这些代码。
+Running the workflow creates `data/processed/`, `data/interim/`, `data/artifacts/`, and `reports/`. These outputs are generated locally. The repository keeps the executed notebook outputs for inspection, while excluding generated files, intermediate drafts, and notebook-build scripts from version control.
 
-## 参考资料
+There are twelve English notebooks in the root directory and twelve corresponding Chinese notebooks in `notebooks/zh-CN/`.
 
-- Settles, B. & Meeder, B. (2016). *A Trainable Spaced Repetition Model for Language Learning*. [论文](https://research.duolingo.com/papers/settles.acl16.pdf) · [原项目与数据说明](https://github.com/duolingo/halflife-regression)。
-- 项目使用的两篇参考论文副本位于 [paper/](paper/)；项目分析见 [report.md](report.md)。
+## 5. References and team
+
+### Selected references
+
+- Settles, B., & Meeder, B. (2016). *A Trainable Spaced Repetition Model for Language Learning*. ACL. [Paper](https://research.duolingo.com/papers/settles.acl16.pdf)
+- Zaidi, A., Caines, A., Moore, R., Buttery, P., & Rice, A. (2020). *Adaptive Forgetting Curves for Spaced Repetition Language Learning*. AIED. [Paper copy](paper/Adaptive%20Forgetting%20Curves%20for%20Spaced.pdf)
+- Breiman, L. (2001). *Random Forests*. Machine Learning, 45, 5–32.
+- Ke, G., et al. (2017). *LightGBM: A Highly Efficient Gradient Boosting Decision Tree*. NeurIPS.
+- Pedregosa, F., et al. (2011). *Scikit-learn: Machine Learning in Python*. Journal of Machine Learning Research, 12, 2825–2830.
+
+### Team
+
+ELEC3544, Fall 2026 · Group 4
+
+| Member | Student ID | Contribution |
+| --- | --- | ---: |
+| Fu Jing | 3036067121 | 50% |
+| Chen Mingjia | 3036068553 | 50% |
+
+Both members contributed equally to idea development, data cleaning, exploratory data analysis, modeling, training, and results analysis. All members agree with this allocation. The final report includes the contribution and AI-tool-use statements.
