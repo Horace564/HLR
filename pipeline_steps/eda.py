@@ -188,3 +188,135 @@ display(pd.DataFrame({
     "lexeme_rows": pd.Series(lexeme_frequency).quantile([0, .5, .9, .99, 1]),
 }))
 
+
+# === ORIGINAL CELL 105 ===
+from collections import Counter
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
+from IPython.display import display
+
+plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
+
+session_eda_rows = Counter()
+session_eda_zero = Counter()
+session_eda_one = Counter()
+session_eda_total = 0
+for session_eda_chunk in pd.read_csv(
+    data_path, compression="gzip", usecols=["session_seen", "p_recall"], chunksize=200_000,
+):
+    session_eda_seen = session_eda_chunk["session_seen"]
+    session_eda_p = session_eda_chunk["p_recall"]
+    if not (session_eda_seen.notna().all()
+            and np.isfinite(session_eda_seen.to_numpy()).all()
+            and session_eda_seen.gt(0).all()
+            and session_eda_seen.eq(np.floor(session_eda_seen)).all()):
+        raise ValueError("session_seen 必须是非缺失的正整数；本分析不自动删除异常行。")
+    if not session_eda_p.between(0, 1).all():
+        raise ValueError("p_recall 必须在 [0, 1] 内且非缺失；本分析不自动删除异常行。")
+    session_eda_rows.update(session_eda_seen.value_counts().to_dict())
+    session_eda_zero.update(session_eda_seen[session_eda_p.eq(0)].value_counts().to_dict())
+    session_eda_one.update(session_eda_seen[session_eda_p.eq(1)].value_counts().to_dict())
+    session_eda_total += len(session_eda_chunk)
+
+session_eda_summary = pd.DataFrame([
+    {"session_seen": int(k), "rows": int(n),
+     "p_zero_rows": int(session_eda_zero[k]), "p_one_rows": int(session_eda_one[k])}
+    for k, n in sorted(session_eda_rows.items())
+]).set_index("session_seen")
+session_eda_summary["p_partial_rows"] = (
+    session_eda_summary["rows"] - session_eda_summary["p_zero_rows"]
+    - session_eda_summary["p_one_rows"]
+)
+session_eda_summary["row_share"] = session_eda_summary["rows"] / session_eda_total
+for session_eda_kind in ["zero", "partial", "one"]:
+    session_eda_summary[f"p_{session_eda_kind}_rate"] = (
+        session_eda_summary[f"p_{session_eda_kind}_rows"] / session_eda_summary["rows"]
+    )
+assert int(session_eda_summary["rows"].sum()) == session_eda_total > 0
+assert session_eda_summary["p_partial_rows"].ge(0).all()
+np.testing.assert_allclose(
+    session_eda_summary[["p_zero_rate", "p_partial_rate", "p_one_rate"]].sum(axis=1), 1.0
+)
+
+if "full_row_count" in globals():
+    assert session_eda_total == full_row_count
+    assert int(session_eda_summary["p_zero_rows"].sum()) == full_p_zero
+    assert int(session_eda_summary["p_one_rows"].sum()) == full_p_one
+if 1 in session_eda_summary.index:
+    assert session_eda_summary.loc[1, "p_partial_rows"] == 0
+
+print(f"全量扫描 {session_eda_total:,} 条去重记录；未抽样、未裁剪标签。")
+print(f"session_seen 范围：{session_eda_summary.index.min()}–{session_eda_summary.index.max()}；"
+      f"实际出现 {len(session_eda_summary)} 种次数。")
+session_eda_distribution_table = session_eda_summary[["rows", "row_share"]].rename(columns={
+    "rows": "去重记录数", "row_share": "占全部记录比例",
+}).copy()
+session_eda_distribution_table["去重记录数"] = session_eda_distribution_table["去重记录数"].map("{:,}".format)
+session_eda_distribution_table["占全部记录比例"] = session_eda_distribution_table["占全部记录比例"].map("{:.4%}".format)
+display(session_eda_distribution_table)
+
+session_eda_positions = np.arange(len(session_eda_summary))
+fig, ax = plt.subplots(figsize=(12, 4.8))
+ax.bar(session_eda_positions, session_eda_summary["rows"], color="#4C78A8")
+ax.set_yscale("log")
+ax.set_xticks(session_eda_positions, session_eda_summary.index.astype(str))
+ax.set(xlabel="当前词项在本次练习中的出现次数（session_seen）",
+       ylabel="去重记录数（对数刻度）",
+       title=f"图 8 · session_seen 分布（全量 {session_eda_total:,} 行）")
+ax.grid(axis="y", alpha=0.25)
+ax.set_axisbelow(True)
+fig.tight_layout()
+plt.show()
+
+# === ORIGINAL CELL 106 ===
+session_eda_rate_table = session_eda_summary[[
+    "rows", "p_zero_rows", "p_partial_rows", "p_one_rows",
+    "p_zero_rate", "p_partial_rate", "p_one_rate",
+]].rename(columns={
+    "rows": "去重记录数", "p_zero_rows": "全错记录数", "p_partial_rows": "部分正确记录数",
+    "p_one_rows": "全对记录数", "p_zero_rate": "p_recall=0 比例",
+    "p_partial_rate": "0<p_recall<1 比例", "p_one_rate": "p_recall=1 比例",
+})
+session_eda_rate_display = session_eda_rate_table.copy()
+for session_eda_column in ["去重记录数", "全错记录数", "部分正确记录数", "全对记录数"]:
+    session_eda_rate_display[session_eda_column] = session_eda_rate_display[session_eda_column].map("{:,}".format)
+for session_eda_column in ["p_recall=0 比例", "0<p_recall<1 比例", "p_recall=1 比例"]:
+    session_eda_rate_display[session_eda_column] = session_eda_rate_display[session_eda_column].map("{:.4%}".format)
+display(session_eda_rate_display)
+
+fig, ax = plt.subplots(figsize=(12, 5.2))
+session_eda_bottom = np.zeros(len(session_eda_summary))
+for session_eda_column, session_eda_label, session_eda_color in [
+    ("p_zero_rate", "全错（p_recall=0）", "#E45756"),
+    ("p_partial_rate", "部分正确（0<p_recall<1）", "#F2CF5B"),
+    ("p_one_rate", "全对（p_recall=1）", "#4C78A8"),
+]:
+    ax.bar(session_eda_positions, session_eda_summary[session_eda_column],
+           bottom=session_eda_bottom, label=session_eda_label, color=session_eda_color)
+    session_eda_bottom += session_eda_summary[session_eda_column].to_numpy()
+ax.set_xticks(session_eda_positions, session_eda_summary.index.astype(str))
+ax.set_ylim(0, 1)
+ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
+ax.set(xlabel="当前词项在本次练习中的出现次数（session_seen）",
+       ylabel="同一 session_seen 组内的记录比例",
+       title="图 9 · 不同 session_seen 下的回忆比例组成（全量精确累计）")
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=3)
+ax.grid(axis="y", alpha=0.2)
+ax.set_axisbelow(True)
+fig.tight_layout()
+plt.show()
+
+session_eda_all_one = int(session_eda_summary["p_one_rows"].sum())
+if 1 in session_eda_summary.index:
+    session_eda_single = session_eda_summary.loc[1]
+    print(f"session_seen=1：{int(session_eda_single['rows']):,} 行，"
+          f"占全部记录 {session_eda_single['row_share']:.2%}；"
+          f"其中全错 {session_eda_single['p_zero_rate']:.2%}，"
+          f"全对 {session_eda_single['p_one_rate']:.2%}，部分正确为 0。")
+    print(f"全部 p_recall=1 记录中，session_seen=1 占 "
+          f"{session_eda_single['p_one_rows'] / session_eda_all_one:.2%}。")
+print(f"全量：p_recall=0 占 {sum(session_eda_zero.values()) / session_eda_total:.2%}；"
+      f"p_recall=1 占 {session_eda_all_one / session_eda_total:.2%}。")

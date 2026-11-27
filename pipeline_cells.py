@@ -107,6 +107,86 @@ ENGLISH_TEXT = {
         "# Offset x positions for clarity; retain the actual metric values on y.",
     "# 两种模型在训练前都必须精确复现原始 HLR -lex。":
         "# Both models must reproduce the original HLR -lex before training.",
+    "# 独立扫描去重后的全量数据，不依赖 2% 抽样，不裁剪标签。":
+        "# Scan the full deduplicated file without sampling or target clipping.",
+    "session_seen 必须是非缺失的正整数；本分析不自动删除异常行。":
+        "session_seen must contain nonmissing positive integers; no rows are dropped.",
+    "p_recall 必须在 [0, 1] 内且非缺失；本分析不自动删除异常行。":
+        "p_recall must be nonmissing and within [0, 1]; no rows are dropped.",
+    "# 与图 1 的全量计数核对；从新增单元开始运行时不依赖已有抽样结果。":
+        "# Check against Figure 1 full-file counts when available.",
+    "全量扫描 {session_eda_total:,} 条去重记录；未抽样、未裁剪标签。":
+        "Scanned all {session_eda_total:,} deduplicated rows without sampling or target clipping.",
+    "session_seen 范围：":
+        "session_seen range: ",
+    "{session_eda_summary.index.max()}；":
+        "{session_eda_summary.index.max()}; ",
+    "实际出现 ":
+        "observed ",
+    " 种次数。":
+        " distinct counts.",
+    "去重记录数（对数刻度）":
+        "Deduplicated rows (log scale)",
+    "去重记录数":
+        "Deduplicated rows",
+    "占全部记录比例":
+        "Share of all rows",
+    "当前词项在本次练习中的出现次数（session_seen）":
+        "Occurrences in the current session (session_seen)",
+    "图 8 · session_seen 分布（全量 {session_eda_total:,} 行）":
+        "Figure 8: session_seen distribution (all {session_eda_total:,} rows)",
+    "# 分母为各 session_seen 组的全部去重记录数，各行等权，不按练习次数加权。":
+        "# Each group uses all its rows as the denominator; rows have equal weight.",
+    "全错记录数":
+        "All-wrong rows",
+    "部分正确记录数":
+        "Partial-recall rows",
+    "全对记录数":
+        "All-correct rows",
+    "p_recall=0 比例":
+        "Share with p_recall=0",
+    "0<p_recall<1 比例":
+        "Share with 0<p_recall<1",
+    "p_recall=1 比例":
+        "Share with p_recall=1",
+    "全错（p_recall=0）":
+        "All wrong (p_recall=0)",
+    "部分正确（0<p_recall<1）":
+        "Partial recall (0<p_recall<1)",
+    "全对（p_recall=1）":
+        "All correct (p_recall=1)",
+    "同一 session_seen 组内的记录比例":
+        "Share within each session_seen group",
+    "图 9 · 不同 session_seen 下的回忆比例组成（全量精确累计）":
+        "Figure 9: Recall composition by session_seen (full-file counts)",
+    "session_seen=1：":
+        "session_seen=1: ",
+    "占全部记录 ":
+        "share of all rows ",
+    "其中全错 ":
+        "all wrong ",
+    "全对 ":
+        "all correct ",
+    "，部分正确为 0。":
+        ", partial recall is zero.",
+    "全部 p_recall=1 记录中，session_seen=1 占 ":
+        "Among all p_recall=1 rows, session_seen=1 accounts for ",
+    "全量：p_recall=0 占 ":
+        "All rows: share with p_recall=0 ",
+    "p_recall=1 占 ":
+        "share with p_recall=1 ",
+    "{int(session_eda_single['rows']):,} 行，":
+        "{int(session_eda_single['rows']):,} rows, ",
+    "{session_eda_single['row_share']:.2%}；":
+        "{session_eda_single['row_share']:.2%}; ",
+    "{session_eda_single['p_zero_rate']:.2%}，":
+        "{session_eda_single['p_zero_rate']:.2%}, ",
+    "{sum(session_eda_zero.values()) / session_eda_total:.2%}；":
+        "{sum(session_eda_zero.values()) / session_eda_total:.2%}; ",
+    "{session_eda_single['p_one_rows'] / session_eda_all_one:.2%}。":
+        "{session_eda_single['p_one_rows'] / session_eda_all_one:.2%}.",
+    "{session_eda_all_one / session_eda_total:.2%}。":
+        "{session_eda_all_one / session_eda_total:.2%}.",
 }
 
 
